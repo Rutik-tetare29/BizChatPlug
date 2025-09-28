@@ -1,27 +1,39 @@
 import {NextRequest, NextResponse} from 'next/server';
-import {respondToUserQuery} from '@/ai/flows/respond-to-user-query';
+import {respondToUserQuery, respondToUserQueryStream} from '@/ai/flows/respond-to-user-query';
 import {captureLeadInformation} from '@/ai/flows/capture-lead-information';
 import {escalateChatToHuman} from '@/ai/flows/escalate-chat-to-human';
 import {detectLanguage} from '@/ai/flows/detect-language';
 import {translateUserMessage} from '@/ai/flows/translate-user-message';
 import {mockFaqs, mockLeads} from '@/lib/mock-data';
+import { ai } from '@/ai/genkit';
 
-// Helper to create a streaming response
+
+// Helper to create a streaming response from a Genkit stream
 function createStreamingResponse(iterator: AsyncGenerator<any>) {
   const stream = new ReadableStream({
     async pull(controller) {
-      const {value, done} = await iterator.next();
+      const { value, done } = await iterator.next();
       if (done) {
         controller.close();
       } else {
-        controller.enqueue(new TextEncoder().encode(value.response));
+        const responseText = typeof value === 'string' ? value : value.response;
+        controller.enqueue(new TextEncoder().encode(responseText));
       }
     },
   });
   return new Response(stream, {
-    headers: {'Content-Type': 'text/plain; charset=utf-8'},
+    headers: { 'Content-Type': 'text/plain; charset=utf-8' },
   });
 }
+
+// Helper to create a simple text response
+function createTextResponse(text: string) {
+   const iterator = (async function* () {
+      yield { response: text };
+    })();
+   return createStreamingResponse(iterator);
+}
+
 
 async function translate(message: string, sourceLanguage: string, targetLanguage: string) {
     if (sourceLanguage.toLowerCase() === targetLanguage.toLowerCase()) {
@@ -42,14 +54,19 @@ export async function POST(req: NextRequest) {
     const { language } = await detectLanguage({ message: userMessage });
     const userLanguage = language;
 
-    if (userLanguage !== 'English') {
-        userMessage = await translate(userMessage, userLanguage, 'English');
-    }
+    // Translate user message to English for processing if necessary
+    const englishUserMessage = userLanguage !== 'English'
+      ? await translate(userMessage, userLanguage, 'English')
+      : userMessage;
 
-    // 2. Lead Capture Check
-    const leadInfo = await captureLeadInformation({userInput: userMessage, pageUrl});
+    // 2. Concurrently check for lead capture and escalation
+    const [leadInfo, escalationCheck] = await Promise.all([
+      captureLeadInformation({userInput: englishUserMessage, pageUrl}),
+      Promise.resolve(englishUserMessage.toLowerCase().includes('human') || englishUserMessage.toLowerCase().includes('agent') || englishUserMessage.toLowerCase().includes('sales rep'))
+    ]);
+    
+    // 3. Handle Lead Capture if applicable
     if (leadInfo.shouldCaptureLead) {
-      // Simulate saving the lead
       const newLead = {
         id: (mockLeads.length + 1).toString(),
         name: leadInfo.name || 'N/A',
@@ -59,8 +76,6 @@ export async function POST(req: NextRequest) {
         createdAt: new Date().toISOString().split('T')[0],
         sourceUrl: pageUrl,
       };
-      // In a real app, you'd save this to a database.
-      // mockLeads.push(newLead);
       console.log('Captured new lead:', newLead);
       
       let leadResponse = `Thanks, ${leadInfo.name || 'friend'}! Someone from our team will be in touch shortly about your interest in ${leadInfo.productOfInterest || 'our services'}.`;
@@ -68,21 +83,15 @@ export async function POST(req: NextRequest) {
       if (userLanguage !== 'English') {
         leadResponse = await translate(leadResponse, 'English', userLanguage);
       }
-
-      const iterator = (async function* () {
-        yield { response: leadResponse };
-      })();
-
-      return createStreamingResponse(iterator);
+      return createTextResponse(leadResponse);
     }
 
-    // 3. Escalation Check (Simple keyword-based for now)
-    if (userMessage.toLowerCase().includes('human') || userMessage.toLowerCase().includes('agent') || userMessage.toLowerCase().includes('sales rep')) {
-      // In a real app, you'd get this from settings.
+    // 4. Handle Escalation if applicable
+    if (escalationCheck) {
       const webhookUrl = 'https://your-crm.com/api/escalate-webhook'; 
       const escalationResult = await escalateChatToHuman({
         chatId: 'simulated-chat-id',
-        message: userMessage,
+        message: englishUserMessage,
         webhookUrl: webhookUrl,
       });
 
@@ -93,35 +102,30 @@ export async function POST(req: NextRequest) {
       if (userLanguage !== 'English') {
         escalationResponse = await translate(escalationResponse, 'English', userLanguage);
       }
-
-      const iterator = (async function* () {
-        yield { response: escalationResponse };
-      })();
-      return createStreamingResponse(iterator);
+      return createTextResponse(escalationResponse);
     }
     
-    // 4. FAQ Answering
+    // 5. FAQ Answering & Streaming Response
     const faqContext = mockFaqs
-      .filter(faq => faq.language.toLowerCase() === userLanguage.toLowerCase())
+      .filter(faq => faq.language.toLowerCase() === 'English') // Always use English context
       .map(faq => `Q: ${faq.question}\nA: ${faq.answer}`)
       .join('\n\n');
 
-    const response = await respondToUserQuery({
-      userQuery: userMessage,
+    // Get the streaming iterator
+    const { stream: responseStream, response: finalResponsePromise } = await respondToUserQueryStream({
+      userQuery: englishUserMessage,
       faqContext: faqContext,
     });
     
-    let finalResponse = response.response;
+    // If the user's language is not English, we need to translate the stream.
     if (userLanguage !== 'English') {
-        finalResponse = await translate(finalResponse, 'English', userLanguage);
+        const finalResponse = await finalResponsePromise;
+        const translatedResponse = await translate(finalResponse.response, 'English', userLanguage);
+        return createTextResponse(translatedResponse);
     }
 
-    // Simulate streaming for non-streaming flow
-    const iterator = (async function* () {
-      yield { response: finalResponse };
-    })();
-
-    return createStreamingResponse(iterator);
+    // Otherwise, we can return the stream directly.
+    return createStreamingResponse(responseStream);
 
   } catch (error) {
     console.error('[CHAT_API_ERROR]', error);

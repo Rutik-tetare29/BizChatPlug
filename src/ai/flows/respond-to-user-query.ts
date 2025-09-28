@@ -4,6 +4,7 @@
  * @fileOverview Responds to user queries using a combination of relevant FAQs and an LLM.
  *
  * - respondToUserQuery - A function that handles responding to user queries.
+ * - respondToUserQueryStream - A streaming version of the function.
  * - RespondToUserQueryInput - The input type for the respondToUserQuery function.
  * - RespondToUserQueryOutput - The return type for the respondToUserQuery function.
  */
@@ -22,9 +23,6 @@ const RespondToUserQueryOutputSchema = z.object({
 });
 export type RespondToUserQueryOutput = z.infer<typeof RespondToUserQueryOutputSchema>;
 
-export async function respondToUserQuery(input: RespondToUserQueryInput): Promise<RespondToUserQueryOutput> {
-  return respondToUserQueryFlow(input);
-}
 
 const prompt = ai.definePrompt({
   name: 'respondToUserQueryPrompt',
@@ -43,14 +41,37 @@ const prompt = ai.definePrompt({
   model: 'googleai/gemini-2.0-flash-exp',
 });
 
-const respondToUserQueryFlow = ai.defineFlow(
+// Non-streaming version
+export async function respondToUserQuery(input: RespondToUserQueryInput): Promise<RespondToUserQueryOutput> {
+  const {output} = await prompt(input);
+  return output!;
+}
+
+
+// Streaming flow
+export const respondToUserQueryStream = ai.defineFlow(
   {
-    name: 'respondToUserQueryFlow',
+    name: 'respondToUserQueryStream',
     inputSchema: RespondToUserQueryInputSchema,
     outputSchema: RespondToUserQueryOutputSchema,
+    stream: true,
   },
-  async input => {
-    const {output} = await prompt(input);
-    return output!;
+  async (input) => {
+    const { stream } = await ai.generate({
+      model: 'googleai/gemini-2.0-flash-exp',
+      prompt: `You are a helpful chatbot assistant.
+
+      Answer the user query using the provided FAQ context. If the FAQ context is not relevant, answer the query to the best of your ability.
+    
+      FAQ Context:
+      ${input.faqContext}
+    
+      User Query:
+      ${input.userQuery}
+      `,
+      stream: true,
+    });
+
+    return stream;
   }
 );

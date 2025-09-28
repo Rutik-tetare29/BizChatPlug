@@ -40,6 +40,7 @@ const prompt = ai.definePrompt({
   User Query:
   {{userQuery}}
   `,
+  model: 'googleai/gemini-1.5-flash-latest',
 });
 
 const respondToUserQueryFlow = ai.defineFlow(

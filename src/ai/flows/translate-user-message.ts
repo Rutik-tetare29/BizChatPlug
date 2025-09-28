@@ -31,6 +31,7 @@ const translateUserMessagePrompt = ai.definePrompt({
   input: {schema: TranslateUserMessageInputSchema},
   output: {schema: TranslateUserMessageOutputSchema},
   prompt: `Translate the following message from {{sourceLanguage}}:\n\n{{message}}`,
+  model: 'googleai/gemini-1.5-flash-latest',
 });
 
 const translateUserMessageFlow = ai.defineFlow(

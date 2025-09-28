@@ -62,7 +62,8 @@ export const useChat = (initialMessages: Message[] = []) => {
       
       if (!response.ok) {
         const errorData = await response.json();
-        throw new Error(errorData.error || `Request failed with status ${response.status}`);
+        // Use the more specific 'details' field if available, otherwise fall back to 'error'
+        throw new Error(errorData.details || errorData.error || `Request failed with status ${response.status}`);
       }
 
       if (!response.body) throw new Error("No response body");

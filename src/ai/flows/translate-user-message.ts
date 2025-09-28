@@ -3,7 +3,7 @@
 /**
  * @fileOverview This file defines a Genkit flow for translating user messages.
  *
- * - translateUserMessage - A function that translates user messages.
+* - translateUserMessage - A function that translates user messages.
  * - TranslateUserMessageInput - The input type for the translateUserMessage function.
  * - TranslateUserMessageOutput - The return type for the translateUserMessage function.
  */

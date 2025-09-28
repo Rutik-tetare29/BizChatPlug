@@ -125,7 +125,15 @@ export async function POST(req: NextRequest) {
 
   } catch (error) {
     console.error('[CHAT_API_ERROR]', error);
-    const errorMessage = error instanceof Error ? error.message : 'An unknown error occurred';
+    let errorMessage = 'An unknown error occurred';
+    if (error instanceof Error) {
+      errorMessage = error.message;
+    }
+
+    if (typeof errorMessage === 'string' && errorMessage.includes('503 Service Unavailable')) {
+      return new NextResponse(JSON.stringify({error: 'The AI service is temporarily unavailable. Please try again in a few moments.', details: errorMessage}), {status: 503});
+    }
+
     return new NextResponse(JSON.stringify({error: 'Something went wrong', details: errorMessage}), {status: 500});
   }
 }

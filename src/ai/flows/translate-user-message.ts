@@ -1,9 +1,9 @@
 'use server';
 
 /**
- * @fileOverview This file defines a Genkit flow for translating user messages to English.
+ * @fileOverview This file defines a Genkit flow for translating user messages.
  *
- * - translateUserMessage - A function that translates user messages to English.
+ * - translateUserMessage - A function that translates user messages.
  * - TranslateUserMessageInput - The input type for the translateUserMessage function.
  * - TranslateUserMessageOutput - The return type for the translateUserMessage function.
  */
@@ -13,12 +13,12 @@ import {z} from 'genkit';
 
 const TranslateUserMessageInputSchema = z.object({
   message: z.string().describe('The message to translate.'),
-  sourceLanguage: z.string().describe('The language of the message.'),
+  sourceLanguage: z.string().describe('The source and target languages, e.g. "English to Hindi".'),
 });
 export type TranslateUserMessageInput = z.infer<typeof TranslateUserMessageInputSchema>;
 
 const TranslateUserMessageOutputSchema = z.object({
-  translatedMessage: z.string().describe('The translated message in English.'),
+  translatedMessage: z.string().describe('The translated message.'),
 });
 export type TranslateUserMessageOutput = z.infer<typeof TranslateUserMessageOutputSchema>;
 
@@ -30,7 +30,7 @@ const translateUserMessagePrompt = ai.definePrompt({
   name: 'translateUserMessagePrompt',
   input: {schema: TranslateUserMessageInputSchema},
   output: {schema: TranslateUserMessageOutputSchema},
-  prompt: `Translate the following message from {{sourceLanguage}} to English:\n\n{{message}}`,
+  prompt: `Translate the following message from {{sourceLanguage}}:\n\n{{message}}`,
 });
 
 const translateUserMessageFlow = ai.defineFlow(

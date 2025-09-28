@@ -2,6 +2,8 @@ import {NextRequest, NextResponse} from 'next/server';
 import {respondToUserQuery} from '@/ai/flows/respond-to-user-query';
 import {captureLeadInformation} from '@/ai/flows/capture-lead-information';
 import {escalateChatToHuman} from '@/ai/flows/escalate-chat-to-human';
+import {detectLanguage} from '@/ai/flows/detect-language';
+import {translateUserMessage} from '@/ai/flows/translate-user-message';
 import {mockFaqs, mockLeads} from '@/lib/mock-data';
 
 // Helper to create a streaming response
@@ -21,13 +23,30 @@ function createStreamingResponse(iterator: AsyncGenerator<any>) {
   });
 }
 
+async function translate(message: string, sourceLanguage: string, targetLanguage: string) {
+    if (sourceLanguage.toLowerCase() === targetLanguage.toLowerCase()) {
+        return message;
+    }
+    const result = await translateUserMessage({message, sourceLanguage: `${sourceLanguage} to ${targetLanguage}`});
+    return result.translatedMessage;
+}
+
+
 export async function POST(req: NextRequest) {
   try {
     const {messages} = await req.json();
-    const userMessage = messages[messages.length - 1]?.content || '';
+    let userMessage = messages[messages.length - 1]?.content || '';
     const pageUrl = req.headers.get('referer') || '';
 
-    // 1. Lead Capture Check
+    // 1. Detect Language
+    const { language } = await detectLanguage({ message: userMessage });
+    const userLanguage = language;
+
+    if (userLanguage !== 'English') {
+        userMessage = await translate(userMessage, userLanguage, 'English');
+    }
+
+    // 2. Lead Capture Check
     const leadInfo = await captureLeadInformation({userInput: userMessage, pageUrl});
     if (leadInfo.shouldCaptureLead) {
       // Simulate saving the lead
@@ -44,8 +63,12 @@ export async function POST(req: NextRequest) {
       // mockLeads.push(newLead);
       console.log('Captured new lead:', newLead);
       
-      const leadResponse = `Thanks, ${leadInfo.name || 'friend'}! Someone from our team will be in touch shortly about your interest in ${leadInfo.productOfInterest || 'our services'}.`;
+      let leadResponse = `Thanks, ${leadInfo.name || 'friend'}! Someone from our team will be in touch shortly about your interest in ${leadInfo.productOfInterest || 'our services'}.`;
       
+      if (userLanguage !== 'English') {
+        leadResponse = await translate(leadResponse, 'English', userLanguage);
+      }
+
       const iterator = (async function* () {
         yield { response: leadResponse };
       })();
@@ -53,7 +76,7 @@ export async function POST(req: NextRequest) {
       return createStreamingResponse(iterator);
     }
 
-    // 2. Escalation Check (Simple keyword-based for now)
+    // 3. Escalation Check (Simple keyword-based for now)
     if (userMessage.toLowerCase().includes('human') || userMessage.toLowerCase().includes('agent') || userMessage.toLowerCase().includes('sales rep')) {
       // In a real app, you'd get this from settings.
       const webhookUrl = 'https://your-crm.com/api/escalate-webhook'; 
@@ -63,18 +86,23 @@ export async function POST(req: NextRequest) {
         webhookUrl: webhookUrl,
       });
 
-      const escalationResponse = escalationResult.success 
+      let escalationResponse = escalationResult.success 
         ? "I've escalated your request to a human agent. They will be with you shortly."
         : "I'm sorry, I couldn't escalate to a human agent right now. Please try again later.";
       
+      if (userLanguage !== 'English') {
+        escalationResponse = await translate(escalationResponse, 'English', userLanguage);
+      }
+
       const iterator = (async function* () {
         yield { response: escalationResponse };
       })();
       return createStreamingResponse(iterator);
     }
     
-    // 3. FAQ Answering
+    // 4. FAQ Answering
     const faqContext = mockFaqs
+      .filter(faq => faq.language.toLowerCase() === userLanguage.toLowerCase())
       .map(faq => `Q: ${faq.question}\nA: ${faq.answer}`)
       .join('\n\n');
 
@@ -83,9 +111,14 @@ export async function POST(req: NextRequest) {
       faqContext: faqContext,
     });
     
+    let finalResponse = response.response;
+    if (userLanguage !== 'English') {
+        finalResponse = await translate(finalResponse, 'English', userLanguage);
+    }
+
     // Simulate streaming for non-streaming flow
     const iterator = (async function* () {
-      yield { response: response.response };
+      yield { response: finalResponse };
     })();
 
     return createStreamingResponse(iterator);

@@ -7,6 +7,8 @@ export const mockFaqs: FAQ[] = [
   { id: '4', question: 'What payment methods do you accept?', answer: 'We accept all major credit cards, as well as PayPal.', category: 'Billing', language: 'English' },
   { id: '5', question: 'How do I cancel my subscription?', answer: 'You can cancel your subscription at any time from your account settings page.', category: 'Billing', language: 'English' },
   { id: '6', question: 'आपकी वापसी नीति क्या है?', answer: 'हमारी वापसी नीति 30 दिनों तक चलती है। यदि आपकी खरीद के 30 दिन बीत चुके हैं, तो दुर्भाग्य से हम आपको धनवापसी या विनिमय की पेशकश नहीं कर सकते।', category: 'शिपिंग', language: 'Hindi' },
+  { id: '7', question: 'तुमची रिटर्न पॉलिसी काय आहे?', answer: 'आमचे रिटर्न पॉलिसी ३० दिवसांपर्यंत चालते. तुमच्या खरेदीला ३० दिवसांपेक्षा जास्त दिवस झाले असल्यास, दुर्दैवाने आम्ही तुम्हाला परतावा किंवा एक्सचेंज देऊ शकत नाही.', category: 'शिपिंग', language: 'Marathi' },
+  { id: '8', question: 'मी माझ्या ऑर्डरचा मागोवा कसा घेऊ शकतो?', answer: 'एकदा तुमची ऑर्डर पाठवल्यानंतर, तुम्हाला एक ट्रॅकिंग नंबर असलेला ईमेल प्राप्त होईल.', category: 'शिपिंग', language: 'Marathi' },
 ];
 
 export const mockLeads: Lead[] = [

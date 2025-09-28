@@ -30,7 +30,7 @@ export type FAQ = {
   question: string;
   answer: string;
   category: string;
-  language: 'English' | 'Hindi';
+  language: 'English' | 'Hindi' | 'Marathi';
 };
 
 export type AnalyticsStat = {

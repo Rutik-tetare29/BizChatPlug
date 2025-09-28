@@ -38,7 +38,7 @@ const prompt = ai.definePrompt({
   User Query:
   {{userQuery}}
   `,
-  model: 'googleai/gemini-2.0-flash-exp',
+  model: 'googleai/gemini-1.5-flash-latest',
 });
 
 // Non-streaming version
@@ -58,7 +58,7 @@ export const respondToUserQueryStream = ai.defineFlow(
   },
   async (input) => {
     const { stream } = await ai.generate({
-      model: 'googleai/gemini-2.0-flash-exp',
+      model: 'googleai/gemini-1.5-flash-latest',
       prompt: `You are a helpful chatbot assistant.
 
       Answer the user query using the provided FAQ context. If the FAQ context is not relevant, answer the query to the best of your ability.

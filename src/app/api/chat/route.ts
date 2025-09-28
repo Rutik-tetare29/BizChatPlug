@@ -1,11 +1,10 @@
 import {NextRequest, NextResponse} from 'next/server';
-import {respondToUserQuery, respondToUserQueryStream} from '@/ai/flows/respond-to-user-query';
+import {respondToUserQueryStream} from '@/ai/flows/respond-to-user-query';
 import {captureLeadInformation} from '@/ai/flows/capture-lead-information';
 import {escalateChatToHuman} from '@/ai/flows/escalate-chat-to-human';
 import {detectLanguage} from '@/ai/flows/detect-language';
 import {translateUserMessage} from '@/ai/flows/translate-user-message';
 import {mockFaqs, mockLeads} from '@/lib/mock-data';
-import { ai } from '@/ai/genkit';
 
 
 // Helper to create a streaming response from a Genkit stream
@@ -127,30 +126,27 @@ export async function POST(req: NextRequest) {
     // Otherwise, we can return the stream directly.
     return createStreamingResponse(responseStream);
 
-  } catch (error) {
+  } catch (error: any) {
     console.error('[CHAT_API_ERROR]', error);
     let errorMessage = 'An unknown error occurred';
-    if (error instanceof Error) {
-      errorMessage = error.message;
+    if (error) {
+      errorMessage = error.message || JSON.stringify(error);
     }
-
-    // Check for API key issues
-    if (typeof errorMessage === 'string' && (
-      errorMessage.includes('API key') || 
-      errorMessage.includes('GEMINI_API_KEY') ||
-      errorMessage.includes('GOOGLE_API_KEY') ||
-      errorMessage.includes('FAILED_PRECONDITION')
-    )) {
+    
+    const status = error.cause?.status || 500;
+    
+    // Provide more specific error messages based on the underlying error
+    if (errorMessage.includes('API key')) {
       return new NextResponse(JSON.stringify({
-        error: 'AI service configuration error. Please check your API key configuration.', 
-        details: 'Missing or invalid Google AI API key. Please set GOOGLE_GENERATIVE_AI_API_KEY in your environment variables.'
-      }), {status: 503});
+        error: 'AI service configuration error.', 
+        details: 'Missing or invalid Google AI API key. Please check your environment variables.'
+      }), {status: 500});
     }
 
-    if (typeof errorMessage === 'string' && errorMessage.includes('503 Service Unavailable')) {
+    if (status === 503 || errorMessage.includes('Service Unavailable')) {
       return new NextResponse(JSON.stringify({error: 'The AI service is temporarily unavailable. Please try again in a few moments.', details: errorMessage}), {status: 503});
     }
 
-    return new NextResponse(JSON.stringify({error: 'Something went wrong', details: errorMessage}), {status: 500});
+    return new NextResponse(JSON.stringify({error: 'Something went wrong', details: errorMessage}), {status: status});
   }
 }

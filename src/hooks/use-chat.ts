@@ -11,6 +11,7 @@ export const useChat = (initialMessages: Message[] = []) => {
   const [messages, setMessages] = useState<Message[]>(initialMessages);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
     if (messages.length === 0) {
@@ -39,6 +40,7 @@ export const useChat = (initialMessages: Message[] = []) => {
     if (!messageContent.trim()) return;
 
     setIsLoading(true);
+    setError(null);
 
     const userMessage: Message = {
       id: Date.now().toString(),
@@ -50,123 +52,80 @@ export const useChat = (initialMessages: Message[] = []) => {
     setMessages(newMessages);
     setInput('');
 
-    const assistantMessage: Message = {
-      id: (Date.now() + 1).toString(),
-      role: 'assistant',
-      content: '',
-    };
-    setMessages(prev => [...prev, assistantMessage]);
+    const assistantMessageId = (Date.now() + 1).toString();
+    setMessages(prev => [...prev, { id: assistantMessageId, role: 'assistant', content: '' }]);
 
-    let retries = 0;
-    let response: Response | null = null;
-    let done = false;
-
-    while (retries <= MAX_RETRIES && !done) {
+    let attempt = 0;
+    while (attempt <= MAX_RETRIES) {
       try {
-        response = await fetch('/api/chat', {
+        const response = await fetch('/api/chat', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ messages: newMessages }),
         });
-        
-        if (response.ok) {
-          done = true;
-        } else if (response.status === 503 && retries < MAX_RETRIES) {
-            console.log(`Service unavailable, retry ${retries + 1}...`);
-            retries++;
-            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-        } else {
-          // This will be caught by the outer try/catch block
+
+        if (!response.ok) {
           const errorData = await response.json();
-          throw new Error(errorData.details || errorData.error || `Request failed with status ${response.status}`);
-        }
-      } catch (error) {
-         if (retries < MAX_RETRIES) {
-            console.log(`Fetch error, retry ${retries + 1}...`, error);
-            retries++;
-            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
-        } else {
-            console.error("Chat API error after retries:", error);
-            let errorMessage = "An unknown error occurred.";
-            
-            if (error instanceof Error) {
-                errorMessage = error.message;
-
-                if (errorMessage.includes('API key') || errorMessage.includes('configuration')) {
-                    errorMessage = "Chat service is currently unavailable due to configuration issues. Please try again later.";
-                } else if (errorMessage.includes('503') || errorMessage.includes('Service Unavailable')) {
-                    errorMessage = "The AI service is temporarily unavailable. Please try again in a few moments.";
-                } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
-                    errorMessage = "Network error. Please check your connection and try again.";
-                }
-            }
-            
-            setMessages(prev =>
-                prev.map(msg =>
-                    msg.id === assistantMessage.id
-                        ? { ...msg, content: `Sorry, ${errorMessage}` }
-                        : msg
-                )
-            );
-            setIsLoading(false);
-            return; // Exit handleSubmit after handling the final error
-        }
-      }
-    }
-
-
-    if (!response || !response.ok) {
-        // This case handles when the loop finishes without a successful response
-        setMessages(prev =>
+          // If it's a server/service issue and we can retry, throw to trigger retry logic
+          if (response.status >= 500 && attempt < MAX_RETRIES) {
+             throw new Error(errorData.error || `Request failed with status ${response.status}`);
+          }
+          // If it's a client error or final retry, show the error and stop.
+          const finalErrorMessage = errorData.error || `An unexpected error occurred.`;
+          setMessages(prev =>
             prev.map(msg =>
-                msg.id === assistantMessage.id
-                    ? { ...msg, content: `Sorry, the AI service is temporarily unavailable. Please try again in a few moments.` }
-                    : msg
+              msg.id === assistantMessageId
+                ? { ...msg, content: `Sorry, ${finalErrorMessage}` }
+                : msg
             )
-        );
-        setIsLoading(false);
-        return;
-    }
+          );
+          setIsLoading(false);
+          return;
+        }
 
+        // Success case
+        if (!response.body) throw new Error("No response body");
 
-    try {
-      if (!response.body) throw new Error("No response body");
-
-      const reader = response.body.getReader();
-      const decoder = new TextDecoder();
-      let assistantResponse = '';
-
-      const processStream = async () => {
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let assistantResponse = '';
+        
         while (true) {
           const { done, value } = await reader.read();
           if (done) break;
-          
           assistantResponse += decoder.decode(value, { stream: true });
-          
           setMessages(prev =>
             prev.map(msg =>
-              msg.id === assistantMessage.id
+              msg.id === assistantMessageId
                 ? { ...msg, content: assistantResponse }
                 : msg
             )
           );
         }
+        
         setIsLoading(false);
-      };
-      processStream();
+        return; // Exit the loop on success
 
-    } catch (error) {
-      console.error("Chat stream processing error:", error);
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
-      
-      setMessages(prev =>
-        prev.map(msg =>
-          msg.id === assistantMessage.id
-            ? { ...msg, content: `Sorry, there was an error processing the response: ${errorMessage}` }
-            : msg
-        )
-      );
-      setIsLoading(false);
+      } catch (error: any) {
+        attempt++;
+        if (attempt > MAX_RETRIES) {
+          const finalMessage = error.message.includes('Service Unavailable') 
+              ? error.message 
+              : "I'm having trouble connecting. Please try again in a moment.";
+
+          setMessages(prev =>
+            prev.map(msg =>
+              msg.id === assistantMessageId
+                ? { ...msg, content: `Sorry, ${finalMessage}` }
+                : msg
+            )
+          );
+          setIsLoading(false);
+          break; // Exit loop after final attempt
+        }
+        // Wait before retrying
+        await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+      }
     }
   };
 

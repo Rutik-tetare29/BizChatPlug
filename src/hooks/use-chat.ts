@@ -93,11 +93,25 @@ export const useChat = (initialMessages: Message[] = []) => {
 
     } catch (error) {
       console.error("Chat API error:", error);
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      let errorMessage = "An unknown error occurred.";
+      
+      if (error instanceof Error) {
+        errorMessage = error.message;
+        
+        // Provide user-friendly messages for common issues
+        if (errorMessage.includes('API key') || errorMessage.includes('configuration')) {
+          errorMessage = "Chat service is currently unavailable due to configuration issues. Please try again later.";
+        } else if (errorMessage.includes('503') || errorMessage.includes('Service Unavailable')) {
+          errorMessage = "The AI service is temporarily unavailable. Please try again in a few moments.";
+        } else if (errorMessage.includes('network') || errorMessage.includes('fetch')) {
+          errorMessage = "Network error. Please check your connection and try again.";
+        }
+      }
+      
       setMessages(prev =>
         prev.map(msg =>
           msg.id === assistantMessage.id
-            ? { ...msg, content: `Sorry, an error occurred: ${errorMessage}` }
+            ? { ...msg, content: `Sorry, ${errorMessage}` }
             : msg
         )
       );

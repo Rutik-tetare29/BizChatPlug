@@ -49,7 +49,7 @@ const prompt = ai.definePrompt({
     "phone": "+15551234567" (if available),
     "productOfInterest": "Product Name" (if available)
   }`,
-  model: 'googleai/gemini-1.5-flash-latest',
+  model: 'googleai/gemini-2.0-flash-exp',
 });
 
 const captureLeadInformationFlow = ai.defineFlow(

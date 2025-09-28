@@ -30,7 +30,7 @@ const detectLanguagePrompt = ai.definePrompt({
   input: {schema: DetectLanguageInputSchema},
   output: {schema: DetectLanguageOutputSchema},
   prompt: `Detect the language of the following message. Respond with "English", "Hindi", or "Marathi". If it's not one of those, respond with "English".\n\n{{message}}`,
-  model: 'googleai/gemini-1.5-flash-latest',
+  model: 'googleai/gemini-2.0-flash-exp',
 });
 
 const detectLanguageFlow = ai.defineFlow(

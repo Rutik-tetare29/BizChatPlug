@@ -130,6 +130,19 @@ export async function POST(req: NextRequest) {
       errorMessage = error.message;
     }
 
+    // Check for API key issues
+    if (typeof errorMessage === 'string' && (
+      errorMessage.includes('API key') || 
+      errorMessage.includes('GEMINI_API_KEY') ||
+      errorMessage.includes('GOOGLE_API_KEY') ||
+      errorMessage.includes('FAILED_PRECONDITION')
+    )) {
+      return new NextResponse(JSON.stringify({
+        error: 'AI service configuration error. Please check your API key configuration.', 
+        details: 'Missing or invalid Google AI API key. Please set GOOGLE_GENERATIVE_AI_API_KEY in your environment variables.'
+      }), {status: 503});
+    }
+
     if (typeof errorMessage === 'string' && errorMessage.includes('503 Service Unavailable')) {
       return new NextResponse(JSON.stringify({error: 'The AI service is temporarily unavailable. Please try again in a few moments.', details: errorMessage}), {status: 503});
     }

@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect } from 'react';
@@ -71,14 +72,17 @@ export const useChat = (initialMessages: Message[] = []) => {
         if (response.ok) {
           done = true;
         } else if (response.status === 503 && retries < MAX_RETRIES) {
-          retries++;
-          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
+            console.log(`Service unavailable, retry ${retries + 1}...`);
+            retries++;
+            await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
         } else {
+          // This will be caught by the outer try/catch block
           const errorData = await response.json();
           throw new Error(errorData.details || errorData.error || `Request failed with status ${response.status}`);
         }
       } catch (error) {
-        if (retries < MAX_RETRIES) {
+         if (retries < MAX_RETRIES) {
+            console.log(`Fetch error, retry ${retries + 1}...`, error);
             retries++;
             await new Promise(resolve => setTimeout(resolve, RETRY_DELAY));
         } else {
@@ -87,7 +91,7 @@ export const useChat = (initialMessages: Message[] = []) => {
             
             if (error instanceof Error) {
                 errorMessage = error.message;
-                
+
                 if (errorMessage.includes('API key') || errorMessage.includes('configuration')) {
                     errorMessage = "Chat service is currently unavailable due to configuration issues. Please try again later.";
                 } else if (errorMessage.includes('503') || errorMessage.includes('Service Unavailable')) {
@@ -105,17 +109,18 @@ export const useChat = (initialMessages: Message[] = []) => {
                 )
             );
             setIsLoading(false);
-            return;
+            return; // Exit handleSubmit after handling the final error
         }
       }
     }
 
 
     if (!response || !response.ok) {
+        // This case handles when the loop finishes without a successful response
         setMessages(prev =>
             prev.map(msg =>
                 msg.id === assistantMessage.id
-                    ? { ...msg, content: `Sorry, The AI service is temporarily unavailable. Please try again in a few moments.` }
+                    ? { ...msg, content: `Sorry, the AI service is temporarily unavailable. Please try again in a few moments.` }
                     : msg
             )
         );
@@ -151,17 +156,13 @@ export const useChat = (initialMessages: Message[] = []) => {
       processStream();
 
     } catch (error) {
-      console.error("Chat API error:", error);
-      let errorMessage = "An unknown error occurred.";
-      
-      if (error instanceof Error) {
-        errorMessage = error.message;
-      }
+      console.error("Chat stream processing error:", error);
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
       
       setMessages(prev =>
         prev.map(msg =>
           msg.id === assistantMessage.id
-            ? { ...msg, content: `Sorry, ${errorMessage}` }
+            ? { ...msg, content: `Sorry, there was an error processing the response: ${errorMessage}` }
             : msg
         )
       );
